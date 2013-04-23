@@ -1,0 +1,73 @@
+#!/bin/bash
+
+LUAFILE=$(readlink -f $1)
+if [ ! -f $LUAFILE ]; then
+    echo "Lua file $LUAFILE does not exist"
+    exit
+fi
+TMPNAME=`mktemp -d`
+LOGDIR=$TMPNAME/logs
+CONFDIR=$TMPNAME/conf
+CONFFILE=$CONFDIR/nginx.conf
+
+PORT=24773
+
+mkdir -p $TMPNAME
+mkdir -p $LOGDIR
+mkdir -p $CONFDIR
+
+cat > $CONFFILE << EOF
+worker_processes  1;
+
+error_log  logs/error.log notice;
+pid        logs/nginx.pid;
+
+events {
+    worker_connections  1024;
+}
+
+
+http {
+    #include       mime.types;
+    default_type  application/octet-stream;
+
+    access_log  logs/access.log  combined;
+
+    sendfile        on;
+    #tcp_nopush     on;
+
+    #keepalive_timeout  0;
+    keepalive_timeout  65;
+
+    server {
+        listen       $PORT;
+        server_name  localhost;
+        location /hello {
+            echo "hello";
+        }
+
+        location /lua {
+            content_by_lua_file "$LUAFILE";
+        }
+    }
+}
+EOF
+
+
+#echo "TEMPDIR:"$TMPNAME
+
+nginx -c $CONFFILE -p $TMPNAME/
+PID=`cat $LOGDIR/nginx.pid`
+
+#echo "Nginx($PID) started successfully."
+
+#echo "Execute lua script."
+
+curl "localhost:$PORT/lua"
+
+#echo
+
+#echo "Kill nginx($PID)."
+kill $PID
+
+rm -r $TMPNAME
