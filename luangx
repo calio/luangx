@@ -39,9 +39,14 @@ http {
     #keepalive_timeout  0;
     keepalive_timeout  65;
 
+    lua_package_path '/usr/local/openresty/lualib/?.lua;;';
+    lua_package_cpath ';;';
+
     server {
         listen       $PORT;
         server_name  localhost;
+
+
         location /hello {
             echo "hello";
         }
@@ -64,6 +69,8 @@ PID=`cat $LOGDIR/nginx.pid`
 #echo "Execute lua script."
 
 curl "localhost:$PORT/lua"
+
+cat $LOGDIR/error.log
 
 #echo
 
