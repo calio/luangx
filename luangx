@@ -1,20 +1,24 @@
 #!/bin/bash
 
-LUAFILE=$(readlink -f $1)
-if [ ! -f $LUAFILE ]; then
-    echo "Lua file $LUAFILE does not exist"
-    exit
-fi
+INPUTFILE=$1
 TMPNAME=`mktemp -d`
 LOGDIR=$TMPNAME/logs
 CONFDIR=$TMPNAME/conf
 CONFFILE=$CONFDIR/nginx.conf
+LUAFILE=$TMPNAME/main.lua
 
 PORT=24773
+
+[ $INPUTFILE == "-" ] && INPUTFILE=
 
 mkdir -p $TMPNAME
 mkdir -p $LOGDIR
 mkdir -p $CONFDIR
+
+while read line
+do
+  echo "$line"
+done > $LUAFILE < "${INPUTFILE:-/proc/${$}/fd/0}" || exit
 
 cat > $CONFFILE << EOF
 worker_processes  1;
@@ -77,4 +81,4 @@ cat $LOGDIR/error.log
 #echo "Kill nginx($PID)."
 kill $PID
 
-rm -r $TMPNAME
+#rm -r $TMPNAME
