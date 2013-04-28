@@ -9,7 +9,7 @@ LUAFILE=$TMPNAME/main.lua
 
 PORT=24773
 
-[ $INPUTFILE == "-" ] && INPUTFILE=
+[[ $INPUTFILE == "-" ]] && INPUTFILE=
 
 mkdir -p $TMPNAME
 mkdir -p $LOGDIR
