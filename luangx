@@ -6,6 +6,7 @@ LOGDIR=$TMPNAME/logs
 CONFDIR=$TMPNAME/conf
 CONFFILE=$CONFDIR/nginx.conf
 LUAFILE=$TMPNAME/main.lua
+PIDFILE=$LOGDIR/nginx.pid
 
 PORT=24773
 
@@ -66,11 +67,20 @@ EOF
 #echo "TEMPDIR:"$TMPNAME
 
 nginx -c $CONFFILE -p $TMPNAME/
-PID=`cat $LOGDIR/nginx.pid`
+PID=`cat $PIDFILE`
 
 #echo "Nginx($PID) started successfully."
 
 #echo "Execute lua script."
+
+on_die()
+{
+    echo "on die, kill nginx:$PID, remove $PIDFILE"
+    kill $PID
+    rm $PIDFILE
+}
+
+trap 'on_die' SIGTERM SIGINT
 
 curl "localhost:$PORT/lua"
 
