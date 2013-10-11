@@ -1,6 +1,7 @@
 #!/bin/bash
 
 INPUTFILE=$1
+LUA_ARGS=$2
 TMPNAME=`mktemp -d`
 LOGDIR=$TMPNAME/logs
 CONFDIR=$TMPNAME/conf
@@ -82,9 +83,10 @@ on_die()
 
 trap 'on_die' SIGTERM SIGINT
 
-curl "localhost:$PORT/lua"
+RES=`curl "localhost:$PORT/lua?$LUA_ARGS"`
 
-cat $LOGDIR/error.log
+echo $RES
+cat $LOGDIR/error.log >&2
 
 #echo
 
