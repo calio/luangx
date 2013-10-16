@@ -1,38 +1,42 @@
 #!/bin/bash
 
-INPUTFILE=$1
-LUA_ARGS=$2
+make_dirs()
+{
+    mkdir -p $ROOT
+    mkdir -p $LOGDIR
+    mkdir -p $CONFDIR
+}
 
-if [[ "$OSTYPE" == "linux-gnu" ]]; then
-    TMPNAME=`mktemp -d`
-elif [[ "$OSTYPE" == "darwin"* ]]; then
-    TMPNAME=`mktemp -d /tmp/luangx.XXXXXXXX`
-else
-    echo "Not supported OS"
-    exit 0
-fi
+on_die()
+{
+    echo "on die, kill nginx:$PID, remove $PIDFILE"
+    kill $PID
+    rm $PIDFILE
+}
 
-LOGDIR=$TMPNAME/logs
-CONFDIR=$TMPNAME/conf
-CONFFILE=$CONFDIR/nginx.conf
-LUAFILE=$TMPNAME/main.lua
-PIDFILE=$LOGDIR/nginx.pid
+set_global()
+{
+    ROOT=$1
 
-PORT=$((($RANDOM + 20000)))
+    LOGDIR=$ROOT/logs
+    CONFDIR=$ROOT/conf
+    CONFFILE=$CONFDIR/nginx.conf
+    LUAFILE=$ROOT/main.lua
+    PIDFILE=$LOGDIR/nginx.pid
 
+    PORT=$((($RANDOM + 20000)))
+}
 
-[[ $INPUTFILE == "-" ]] && INPUTFILE=
+make_start_script() {
+    cat >start-nginx.sh <<EOF
+nginx -c `pwd`/conf/nginx.conf -p `pwd`/
+EOF
+    chmod +x start-nginx.sh
+}
 
-mkdir -p $TMPNAME
-mkdir -p $LOGDIR
-mkdir -p $CONFDIR
+make_conf() {
+    cat > $CONFFILE << EOF
 
-while read line
-do
-  echo "$line"
-done > $LUAFILE < "${INPUTFILE:-/proc/${$}/fd/0}" || exit
-
-cat > $CONFFILE << EOF
 worker_processes  1;
 
 error_log  logs/error.log notice;
@@ -73,8 +77,41 @@ http {
     }
 }
 EOF
+}
 
 
+if [[ "$1" == "--make-env" ]]; then
+    set_global .
+    make_dirs
+    make_conf
+    make_start_script
+    echo "Done."
+    exit
+else
+    INPUTFILE=$1
+    LUA_ARGS=$2
+    if [[ "$OSTYPE" == "linux-gnu" ]]; then
+        TMPNAME=`mktemp -d`
+    elif [[ "$OSTYPE" == "darwin"* ]]; then
+        TMPNAME=`mktemp -d /tmp/luangx.XXXXXXXX`
+    else
+        echo "Not supported OS"
+        exit 0
+    fi
+    set_global $TMPNAME
+fi
+
+
+[[ $INPUTFILE == "-" ]] && INPUTFILE=
+
+make_dirs
+
+while read line
+do
+  echo "$line"
+done > $LUAFILE < "${INPUTFILE:-/proc/${$}/fd/0}" || exit
+
+make_conf
 #echo "TEMPDIR:"$TMPNAME
 
 nginx -c $CONFFILE -p $TMPNAME/
@@ -84,12 +121,6 @@ PID=`cat $PIDFILE`
 
 #echo "Execute lua script."
 
-on_die()
-{
-    echo "on die, kill nginx:$PID, remove $PIDFILE"
-    kill $PID
-    rm $PIDFILE
-}
 
 trap 'on_die' SIGTERM SIGINT
 
