@@ -32,6 +32,16 @@ make_start_script() {
 nginx -c `pwd`/conf/nginx.conf -p `pwd`/
 EOF
     chmod +x start-nginx.sh
+
+    cat >restart-nginx.sh <<EOF
+kill -HUP `cat logs/nginx.pid `
+EOF
+    chmod +x restart-nginx.sh
+
+    cat >stop-nginx.sh <<EOF
+kill `cat logs/nginx.pid `
+EOF
+    chmod +x stop-nginx.sh
 }
 
 make_conf() {
@@ -59,7 +69,7 @@ http {
     #keepalive_timeout  0;
     keepalive_timeout  65;
 
-    lua_package_path '/usr/local/openresty/lualib/?.lua;;';
+    lua_package_path 'lib/?.lua;/usr/local/openresty/lualib/?.lua;;';
     lua_package_cpath ';;';
 
     server {
