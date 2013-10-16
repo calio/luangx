@@ -1,13 +1,23 @@
 #!/bin/bash
 
 INPUTFILE=$1
-TMPNAME=`mktemp -d`
+
+if [[ "$OSTYPE" == "linux-gnu" ]]; then
+    TMPNAME=`mktemp -d`
+elif [[ "$OSTYPE" == "darwin"* ]]; then
+    TMPNAME=`mktemp -d /tmp/luangx.XXXXXXXX`
+else
+    echo "Not supported OS"
+    exit 0
+fi
+
 LOGDIR=$TMPNAME/logs
 CONFDIR=$TMPNAME/conf
 CONFFILE=$CONFDIR/nginx.conf
 LUAFILE=$TMPNAME/main.lua
 
 PORT=24773
+
 
 [[ $INPUTFILE == "-" ]] && INPUTFILE=
 
