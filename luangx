@@ -93,7 +93,7 @@ on_die()
 
 trap 'on_die' SIGTERM SIGINT
 
-RES=`curl "localhost:$PORT/lua?$LUA_ARGS"`
+RES=`curl "localhost:$PORT/lua?$LUA_ARGS" 2>/dev/null`
 
 echo $RES
 cat $LOGDIR/error.log >&2
