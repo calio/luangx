@@ -2,7 +2,16 @@
 
 INPUTFILE=$1
 LUA_ARGS=$2
-TMPNAME=`mktemp -d`
+
+if [[ "$OSTYPE" == "linux-gnu" ]]; then
+    TMPNAME=`mktemp -d`
+elif [[ "$OSTYPE" == "darwin"* ]]; then
+    TMPNAME=`mktemp -d /tmp/luangx.XXXXXXXX`
+else
+    echo "Not supported OS"
+    exit 0
+fi
+
 LOGDIR=$TMPNAME/logs
 CONFDIR=$TMPNAME/conf
 CONFFILE=$CONFDIR/nginx.conf
@@ -10,6 +19,7 @@ LUAFILE=$TMPNAME/main.lua
 PIDFILE=$LOGDIR/nginx.pid
 
 PORT=24773
+
 
 [[ $INPUTFILE == "-" ]] && INPUTFILE=
 
