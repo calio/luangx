@@ -18,7 +18,7 @@ CONFFILE=$CONFDIR/nginx.conf
 LUAFILE=$TMPNAME/main.lua
 PIDFILE=$LOGDIR/nginx.pid
 
-PORT=24773
+PORT=$((($RANDOM + 20000)))
 
 
 [[ $INPUTFILE == "-" ]] && INPUTFILE=
