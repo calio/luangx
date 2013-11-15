@@ -8,6 +8,14 @@ use strict;
 use warnings;
 
 my $PORT = int(rand(10000) + 10000);
+my %opts;
+
+
+sub usage_and_die()
+{
+    usage();
+    die;
+}
 
 sub usage()
 {
@@ -107,8 +115,7 @@ sub check_cmd($)
     my $cmd = shift;
     if ($cmd ne "run" && $cmd ne "make-env" && $cmd ne "bench") {
         print "Unknown command: $cmd\n";
-        usage();
-        exit 1;
+        usage_and_die();
     }
 }
 
@@ -148,7 +155,15 @@ sub curl($) {
 
 sub benchmark($) {
     my $tmpdir = shift;
-    my $cmd = "ab -c 2 -n 5000 \"http://127.0.0.1:$PORT/lua?a=1\" 2>&1";
+    my $concurrency = $opts{c};
+    my $num = $opts{n};
+
+    if (!$concurrency or !$num) {
+        usage_and_die();
+    }
+
+    my $cmd = "ab -c $concurrency -n $num \"http://127.0.0.1:$PORT/lua?a=1\""
+            . "2>&1";
     #print("cmd: $cmd\n");
     my $res = `$cmd`;
 
@@ -183,9 +198,7 @@ sub run_file($$) {
 my $cmd = shift || "run";
 
 check_cmd($cmd);
-
-my %opts;
-getopts('h', \%opts) or die "Usage: xxx";
+getopts('hc:n:', \%opts) or die "Usage: xxx";
 
 my $luafile = shift;
 
