@@ -1,6 +1,7 @@
 #!/usr/bin/env perl
 
 use Getopt::Std;
+use Cwd qw /getcwd/;
 use File::Temp qw/ tempdir /;
 use File::Copy;
 
@@ -9,6 +10,7 @@ use warnings;
 
 my $PORT = int(rand(10000) + 10000);
 my %opts;
+my $work_dir = getcwd();
 
 
 sub usage_and_die()
@@ -54,7 +56,7 @@ http {
     #keepalive_timeout  0;
     keepalive_timeout  65;
 
-    lua_package_path 'lib/?.lua;/usr/local/openresty/lualib/?.lua;;';
+    lua_package_path '$work_dir/lib/?.lua;$root/lib/?.lua;/usr/local/openresty/lualib/?.lua;;';
     lua_package_cpath ';;';
 
     server {
@@ -207,7 +209,9 @@ if ($argc == 0) {
     check_cmd($cmd);
 }
 
-getopts('hc:n:', \%opts) or die "Usage: xxx";
+if (!getopts('hc:n:', \%opts)) {
+    usage_and_die();
+}
 
 my $luafile = shift;
 
