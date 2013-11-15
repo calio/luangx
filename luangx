@@ -1,61 +1,49 @@
-#!/bin/bash
+#!/usr/bin/env perl
 
-make_dirs()
+use Getopt::Std;
+use Cwd qw /getcwd/;
+use File::Temp qw/ tempdir /;
+use File::Copy;
+
+use strict;
+use warnings;
+
+my $PORT = int(rand(10000) + 10000);
+my %opts;
+my $work_dir = getcwd();
+my $error_level = "notice";
+
+
+sub usage_and_die()
 {
-    mkdir -p $ROOT
-    mkdir -p $LOGDIR
-    mkdir -p $CONFDIR
+    usage();
+    exit 1;
 }
 
-on_die()
+sub usage()
 {
-    echo "on die, kill nginx:$PID, remove $PIDFILE"
-    kill $PID
-    rm $PIDFILE
+    print "usage:\n";
 }
 
-set_global()
-{
-    ROOT=$1
-
-    LOGDIR=$ROOT/logs
-    CONFDIR=$ROOT/conf
-    CONFFILE=$CONFDIR/nginx.conf
-    LUAFILE=$ROOT/main.lua
-    PIDFILE=$LOGDIR/nginx.pid
-
-    PORT=$((($RANDOM + 20000)))
+sub make_dirs($) {
+    my $root = shift;
+    mkdir "$root/logs";
+    mkdir "$root/conf";
 }
 
-make_start_script() {
-    cat >start-nginx.sh <<EOF
-nginx -c `pwd`/conf/nginx.conf -p `pwd`/
-EOF
-    chmod +x start-nginx.sh
+sub make_conf($) {
+    my $root = shift;
 
-    cat >restart-nginx.sh <<EOF
-kill -HUP `cat logs/nginx.pid `
-EOF
-    chmod +x restart-nginx.sh
+    my $conf = <<END;
 
-    cat >stop-nginx.sh <<EOF
-kill `cat logs/nginx.pid `
-EOF
-    chmod +x stop-nginx.sh
-}
+worker_processes  2;
 
-make_conf() {
-    cat > $CONFFILE << EOF
-
-worker_processes  1;
-
-error_log  logs/error.log notice;
+error_log  logs/error.log $error_level;
 pid        logs/nginx.pid;
 
 events {
     worker_connections  1024;
 }
-
 
 http {
     #include       mime.types;
@@ -69,11 +57,11 @@ http {
     #keepalive_timeout  0;
     keepalive_timeout  65;
 
-    lua_package_path 'lib/?.lua;/usr/local/openresty/lualib/?.lua;;';
+    lua_package_path '$work_dir/lib/?.lua;$root/lib/?.lua;/usr/local/openresty/lualib/?.lua;;';
     lua_package_cpath ';;';
 
     server {
-        listen       $PORT;
+        listen       $PORT backlog=512;
         server_name  localhost;
 
 
@@ -82,66 +70,168 @@ http {
         }
 
         location /lua {
-            content_by_lua_file "$LUAFILE";
+            content_by_lua_file "$root/main.lua";
         }
     }
 }
-EOF
+
+END
+
+    open FILE, ">", "$root/conf/nginx.conf"
+            or die "Can't open $root/conf/nginx.conf: $!";
+    print FILE $conf;
+    close FILE;
 }
 
+sub make_start_script($)
+{
+    my $root = shift;
+    open FILE, ">", "$root/start-nginx.sh"
+            or die "Can't open $root/start-nginx.sh: $!";
 
-if [[ "$1" == "--make-env" ]]; then
-    set_global .
-    make_dirs
-    make_conf
-    make_start_script
-    echo "Done."
-    exit
-else
-    INPUTFILE=$1
-    LUA_ARGS=$2
-    if [[ "$OSTYPE" == "linux-gnu" ]]; then
-        TMPNAME=`mktemp -d`
-    elif [[ "$OSTYPE" == "darwin"* ]]; then
-        TMPNAME=`mktemp -d /tmp/luangx.XXXXXXXX`
-    else
-        echo "Not supported OS"
-        exit 0
-    fi
-    set_global $TMPNAME
-fi
+    print FILE <<'EOF';
+nginx -c `pwd`\/conf\/nginx.conf -p `pwd`/
+EOF
+    close FILE;
 
+    open FILE, ">", "$root/stop-nginx.sh"
+            or die "Can't open $root/stop-nginx.sh: $!";
+    print FILE <<'EOF';
+kill `cat logs/nginx.pid `
+EOF
+    close FILE;
 
-[[ $INPUTFILE == "-" ]] && INPUTFILE=
+    chmod 0755, "$root/start-nginx.sh", "$root/stop-nginx.sh"
+            or die "chmod failed: $!";
+}
 
-make_dirs
+sub make_env($)
+{
+    my $base = shift;
+    make_dirs($base);
+    make_conf($base);
+    make_start_script($base);
+}
 
-while read line
-do
-  echo "$line"
-done > $LUAFILE < "${INPUTFILE:-/proc/${$}/fd/0}" || exit
+sub check_cmd($)
+{
+    my $cmd = shift;
 
-make_conf
-#echo "TEMPDIR:"$TMPNAME
+    if ($cmd ne "run" && $cmd ne "make-env" && $cmd ne "bench") {
+        print "Unknown command: $cmd\n";
+        usage_and_die();
+    }
+}
 
-nginx -c $CONFFILE -p $TMPNAME/
-PID=`cat $PIDFILE`
+sub prepare_lua_file($$)
+{
+    my ($luafile, $workdir) = @_;
+    copy($luafile, "$workdir/main.lua");
+}
 
-#echo "Nginx($PID) started successfully."
+sub start_nginx($)
+{
+    my $workdir = shift;
+    chdir $workdir;
 
-#echo "Execute lua script."
+    `./start-nginx.sh`;
+    my $pid = `cat logs/nginx.pid`;
+    chomp $pid;
 
+    #print("pid: $pid\n");
+    return $pid;
+}
 
-trap 'on_die' SIGTERM SIGINT
+sub curl($) {
+    my $tmpdir = shift;
 
-RES=`curl "localhost:$PORT/lua?$LUA_ARGS" 2>/dev/null`
+    my $res = `curl "localhost:$PORT/lua?a=1" 2>/dev/null`;
 
-echo $RES
-cat $LOGDIR/error.log >&2
+    print $res;
 
-#echo
+    open ERROR_LOG, "$tmpdir/logs/error.log"
+            or die "Can't open $tmpdir/logs/error.log: $!";
+    while (<ERROR_LOG>) {
+        print;
+    }
+    close ERROR_LOG;
+}
 
-#echo "Kill nginx($PID)."
-kill $PID
+sub benchmark($) {
+    my $tmpdir = shift;
+    my $concurrency = $opts{c};
+    my $num = $opts{n};
 
-#rm -r $TMPNAME
+    if (!$concurrency or !$num) {
+        usage_and_die();
+    }
+
+    my $keepalive = "";
+    if ($opts{k}) {
+        $keepalive = "-k";
+    }
+
+    my $cmd = "ab -c $concurrency -n $num $keepalive "
+            . "\"http://127.0.0.1:$PORT/lua?a=1\""
+            . "2>&1";
+    #print("cmd: $cmd\n");
+    my $res = `$cmd`;
+
+    print $res;
+
+    #open ERROR_LOG, "$tmpdir/logs/error.log"
+    #       or die "Can't open $tmpdir/logs/error.log: $!";
+    #while (<ERROR_LOG>) {
+    #    print;
+    #}
+    #close ERROR_LOG;
+}
+
+sub run_file($$) {
+    my ($luafile, $run) = @_;
+
+    my $tmpdir = tempdir( "/tmp/luangx.XXXXXXXX");
+
+    make_env($tmpdir);
+
+    prepare_lua_file($luafile, $tmpdir);
+
+    my $pid = start_nginx($tmpdir);
+
+    &$run($tmpdir);
+
+    kill "TERM", $pid;
+    `rm -r $tmpdir`;
+}
+
+my $cmd;
+my $argc = @ARGV;
+
+if ($argc == 0) {
+    usage_and_die();
+} elsif ($argc == 1) {
+    $cmd = "run";
+} else {
+    $cmd = shift;
+    check_cmd($cmd);
+}
+
+if (!getopts('hc:n:k', \%opts)) {
+    usage_and_die();
+}
+
+my $luafile = shift;
+
+if (!$luafile) {
+    warn 'Missing lua file';
+    usage_and_die();
+}
+
+if ($cmd eq "make-env") {
+    make_env(".");
+} elsif ($cmd eq "run") {
+    run_file($luafile, \&curl);
+} elsif ($cmd eq "bench") {
+    $error_level = "error";
+    run_file($luafile, \&benchmark);
+}

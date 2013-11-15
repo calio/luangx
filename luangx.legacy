@@ -1,0 +1,147 @@
+#!/bin/bash
+
+make_dirs()
+{
+    mkdir -p $ROOT
+    mkdir -p $LOGDIR
+    mkdir -p $CONFDIR
+}
+
+on_die()
+{
+    echo "on die, kill nginx:$PID, remove $PIDFILE"
+    kill $PID
+    rm $PIDFILE
+}
+
+set_global()
+{
+    ROOT=$1
+
+    LOGDIR=$ROOT/logs
+    CONFDIR=$ROOT/conf
+    CONFFILE=$CONFDIR/nginx.conf
+    LUAFILE=$ROOT/main.lua
+    PIDFILE=$LOGDIR/nginx.pid
+
+    PORT=$((($RANDOM + 20000)))
+}
+
+make_start_script() {
+    cat >start-nginx.sh <<EOF
+nginx -c `pwd`/conf/nginx.conf -p `pwd`/
+EOF
+    chmod +x start-nginx.sh
+
+    cat >restart-nginx.sh <<EOF
+kill -HUP `cat logs/nginx.pid `
+EOF
+    chmod +x restart-nginx.sh
+
+    cat >stop-nginx.sh <<EOF
+kill `cat logs/nginx.pid `
+EOF
+    chmod +x stop-nginx.sh
+}
+
+make_conf() {
+    cat > $CONFFILE << EOF
+
+worker_processes  1;
+
+error_log  logs/error.log notice;
+pid        logs/nginx.pid;
+
+events {
+    worker_connections  1024;
+}
+
+
+http {
+    #include       mime.types;
+    default_type  application/octet-stream;
+
+    access_log  logs/access.log  combined;
+
+    sendfile        on;
+    #tcp_nopush     on;
+
+    #keepalive_timeout  0;
+    keepalive_timeout  65;
+
+    lua_package_path 'lib/?.lua;/usr/local/openresty/lualib/?.lua;;';
+    lua_package_cpath ';;';
+
+    server {
+        listen       $PORT;
+        server_name  localhost;
+
+
+        location /hello {
+            echo "hello";
+        }
+
+        location /lua {
+            content_by_lua_file "$LUAFILE";
+        }
+    }
+}
+EOF
+}
+
+
+if [[ "$1" == "--make-env" ]]; then
+    set_global .
+    make_dirs
+    make_conf
+    make_start_script
+    echo "Done."
+    exit
+else
+    INPUTFILE=$1
+    LUA_ARGS=$2
+    if [[ "$OSTYPE" == "linux-gnu" ]]; then
+        TMPNAME=`mktemp -d`
+    elif [[ "$OSTYPE" == "darwin"* ]]; then
+        TMPNAME=`mktemp -d /tmp/luangx.XXXXXXXX`
+    else
+        echo "Not supported OS"
+        exit 0
+    fi
+    set_global $TMPNAME
+fi
+
+
+[[ $INPUTFILE == "-" ]] && INPUTFILE=
+
+make_dirs
+
+while read line
+do
+  echo "$line"
+done > $LUAFILE < "${INPUTFILE:-/proc/${$}/fd/0}" || exit
+
+make_conf
+#echo "TEMPDIR:"$TMPNAME
+
+nginx -c $CONFFILE -p $TMPNAME/
+PID=`cat $PIDFILE`
+
+#echo "Nginx($PID) started successfully."
+
+#echo "Execute lua script."
+
+
+trap 'on_die' SIGTERM SIGINT
+
+RES=`curl "localhost:$PORT/lua?$LUA_ARGS" 2>/dev/null`
+
+echo $RES
+cat $LOGDIR/error.log >&2
+
+#echo
+
+#echo "Kill nginx($PID)."
+kill $PID
+
+#rm -r $TMPNAME
