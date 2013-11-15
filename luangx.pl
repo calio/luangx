@@ -101,7 +101,7 @@ sub make_env($)
 sub check_cmd($)
 {
     my $cmd = shift;
-    if ($cmd ne "run" && $cmd ne "make-env") {
+    if ($cmd ne "run" && $cmd ne "make-env" && $cmd ne "bench") {
         print "Unknown command: $cmd\n";
         usage();
         exit 1;
@@ -123,21 +123,17 @@ sub start_nginx($)
     my $pid = `cat logs/nginx.pid`;
     chomp $pid;
 
+    sleep(1);
+
+print("pid: $pid\n");
     return $pid;
 }
 
-sub run_file($) {
-    my $luafile = shift;
-
-    my $tmpdir = tempdir( CLEANUP => 1 );
-
-    make_env($tmpdir);
-
-    prepare_lua_file($luafile, $tmpdir);
-
-    my $pid = start_nginx($tmpdir);
+sub curl($) {
+    my $tmpdir = shift;
 
     my $res = `curl "localhost:$PORT/lua?a=1" 2>/dev/null`;
+
     print $res;
 
     open ERROR_LOG, "$tmpdir/logs/error.log" or die "Can't open $tmpdir/logs/error.log: $!";
@@ -145,8 +141,38 @@ sub run_file($) {
         print;
     }
     close ERROR_LOG;
+}
 
-    kill $pid;
+sub benchmark($) {
+    my $tmpdir = shift;
+my $cmd = "ab -c 2 -n 100 \"http://127.0.0.1:$PORT/lua?a=1\" 2>&1";
+print("cmd: $cmd\n");
+    my $res = `$cmd`;
+
+    print $res;
+
+    open ERROR_LOG, "$tmpdir/logs/error.log" or die "Can't open $tmpdir/logs/error.log: $!";
+    while (<ERROR_LOG>) {
+        print;
+    }
+    close ERROR_LOG;
+}
+
+sub run_file($$) {
+    my ($luafile, $run) = @_;
+
+    my $tmpdir = tempdir( "/tmp/luangx.XXXXXXXX");
+
+    make_env($tmpdir);
+
+    prepare_lua_file($luafile, $tmpdir);
+
+    my $pid = start_nginx($tmpdir);
+
+    &$run($tmpdir);
+
+    kill "TERM", $pid;
+    `rm -r $tmpdir`;
 }
 
 my $cmd = shift || "run";
@@ -166,5 +192,8 @@ if (!$luafile) {
 if ($cmd eq "make-env") {
     make_env(".");
 } elsif ($cmd eq "run") {
-    run_file($luafile);
+    run_file($luafile, \&curl);
+} elsif ($cmd eq "bench") {
+    print("port: $PORT\n");
+    run_file($luafile, \&benchmark);
 }
