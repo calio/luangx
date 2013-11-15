@@ -1,18 +1,29 @@
-#!/bin/env perl
+#!/usr/bin/env perl
 
 use Getopt::Std;
+use File::Temp qw/ tempdir /;
+use File::Copy;
 
 use strict;
 use warnings;
 
-sub make_dirs() {
-    my $root = ".";
+my $PORT = int(rand(10000) + 10000);
+
+sub usage()
+{
+    print "usage:\n";
+}
+
+sub make_dirs($) {
+    my $root = shift;
     mkdir "$root/logs";
     mkdir "$root/conf";
 }
 
-sub make_conf() {
-    my $conf = <<'END';
+sub make_conf($) {
+    my $root = shift;
+
+    my $conf = <<END;
 
 worker_processes  1;
 
@@ -20,7 +31,7 @@ error_log  logs/error.log notice;
 pid        logs/nginx.pid;
 
 events {
-    worker_connections  1024;
+    worker_connections  256;
 }
 
 http {
@@ -48,44 +59,91 @@ http {
         }
 
         location /lua {
-            content_by_lua_file "$LUAFILE";
+            content_by_lua_file "$root/main.lua";
         }
     }
 }
 
 END
 
-    print $conf;
+    open FILE, ">", "$root/conf/nginx.conf" or die "Can't open $root/conf/nginx.conf: $!";
+    print FILE $conf;
+    close FILE;
 }
 
-sub make_start_script()
+sub make_start_script($)
 {
-    open FILE, ">", "start-nginx.sh" or die "Can't open start-nginx.sh: $!";
+    my $root = shift;
+    open FILE, ">", "$root/start-nginx.sh" or die "Can't open $root/start-nginx.sh: $!";
 
-    print ">start-nginx.sh" <<'EOF';
+    print FILE <<'EOF';
 nginx -c `pwd`\/conf\/nginx.conf -p `pwd`/
 EOF
+    close FILE;
 
+    open FILE, ">", "$root/stop-nginx.sh" or die "Can't open $root/stop-nginx.sh: $!";
+    print FILE <<'EOF';
+kill `cat logs/nginx.pid `
+EOF
+    close FILE;
+
+    chmod 0755, "$root/start-nginx.sh", "$root/stop-nginx.sh" or die "chmod failed: $!";
 }
 
-my $cmd = shift;
+sub make_env($)
+{
+    my $base = shift;
+    make_dirs($base);
+    make_conf($base);
+    make_start_script($base);
+}
 
-print "Command is: ", $cmd;
+sub check_cmd($)
+{
+    my $cmd = shift;
+    if ($cmd ne "run" && $cmd ne "make-env") {
+        print "Unknown command: $cmd\n";
+        usage();
+        exit 1;
+    }
+}
+my $cmd = shift || "run";
+
+check_cmd($cmd);
 
 my %opts;
-
-sub usage()
-{
-    print "usage:\n";
-}
-
 getopts('h', \%opts) or die "Usage: xxx";
 
-if ($cmd eq "make-env") {
-    make_dirs();
-    make_conf();
-    make_start_script();
+my $luafile = shift;
+
+if (!$luafile) {
+    warn 'Missing lua file';
+    usage();
 }
 
-make_conf();
-make_start_script();
+if ($cmd eq "make-env") {
+    make_env(".");
+}
+
+my $tmpdir = tempdir( CLEANUP => 1 );
+
+make_env($tmpdir);
+
+copy($luafile, "$tmpdir/main.lua");
+
+chdir $tmpdir;
+
+`./start-nginx.sh`;
+my $pid = `cat logs/nginx.pid`;
+chomp $pid;
+
+my $res = `curl "localhost:$PORT/lua?a=1" 2>/dev/null`;
+print $res;
+
+open ERROR_LOG, "$tmpdir/logs/error.log" or die "Can't open $tmpdir/logs/error.log: $!";
+while (<ERROR_LOG>) {
+    print;
+}
+close ERROR_LOG;
+
+kill $pid;
