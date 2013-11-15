@@ -107,6 +107,48 @@ sub check_cmd($)
         exit 1;
     }
 }
+
+sub prepare_lua_file($$)
+{
+    my ($luafile, $workdir) = @_;
+    copy($luafile, "$workdir/main.lua");
+}
+
+sub start_nginx($)
+{
+    my $workdir = shift;
+    chdir $workdir;
+
+    `./start-nginx.sh`;
+    my $pid = `cat logs/nginx.pid`;
+    chomp $pid;
+
+    return $pid;
+}
+
+sub run_file($) {
+    my $luafile = shift;
+
+    my $tmpdir = tempdir( CLEANUP => 1 );
+
+    make_env($tmpdir);
+
+    prepare_lua_file($luafile, $tmpdir);
+
+    my $pid = start_nginx($tmpdir);
+
+    my $res = `curl "localhost:$PORT/lua?a=1" 2>/dev/null`;
+    print $res;
+
+    open ERROR_LOG, "$tmpdir/logs/error.log" or die "Can't open $tmpdir/logs/error.log: $!";
+    while (<ERROR_LOG>) {
+        print;
+    }
+    close ERROR_LOG;
+
+    kill $pid;
+}
+
 my $cmd = shift || "run";
 
 check_cmd($cmd);
@@ -123,27 +165,6 @@ if (!$luafile) {
 
 if ($cmd eq "make-env") {
     make_env(".");
+} elsif ($cmd eq "run") {
+    run_file($luafile);
 }
-
-my $tmpdir = tempdir( CLEANUP => 1 );
-
-make_env($tmpdir);
-
-copy($luafile, "$tmpdir/main.lua");
-
-chdir $tmpdir;
-
-`./start-nginx.sh`;
-my $pid = `cat logs/nginx.pid`;
-chomp $pid;
-
-my $res = `curl "localhost:$PORT/lua?a=1" 2>/dev/null`;
-print $res;
-
-open ERROR_LOG, "$tmpdir/logs/error.log" or die "Can't open $tmpdir/logs/error.log: $!";
-while (<ERROR_LOG>) {
-    print;
-}
-close ERROR_LOG;
-
-kill $pid;
