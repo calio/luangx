@@ -14,7 +14,7 @@ my %opts;
 sub usage_and_die()
 {
     usage();
-    die;
+    exit 1;
 }
 
 sub usage()
@@ -113,6 +113,7 @@ sub make_env($)
 sub check_cmd($)
 {
     my $cmd = shift;
+
     if ($cmd ne "run" && $cmd ne "make-env" && $cmd ne "bench") {
         print "Unknown command: $cmd\n";
         usage_and_die();
@@ -194,17 +195,25 @@ sub run_file($$) {
     `rm -r $tmpdir`;
 }
 
+my $cmd;
+my $argc = @ARGV;
 
-my $cmd = shift || "run";
+if ($argc == 0) {
+    usage_and_die();
+} elsif ($argc == 1) {
+    $cmd = "run";
+} else {
+    $cmd = shift;
+    check_cmd($cmd);
+}
 
-check_cmd($cmd);
 getopts('hc:n:', \%opts) or die "Usage: xxx";
 
 my $luafile = shift;
 
 if (!$luafile) {
     warn 'Missing lua file';
-    usage();
+    usage_and_die();
 }
 
 if ($cmd eq "make-env") {
