@@ -66,7 +66,8 @@ http {
 
 END
 
-    open FILE, ">", "$root/conf/nginx.conf" or die "Can't open $root/conf/nginx.conf: $!";
+    open FILE, ">", "$root/conf/nginx.conf"
+            or die "Can't open $root/conf/nginx.conf: $!";
     print FILE $conf;
     close FILE;
 }
@@ -74,20 +75,23 @@ END
 sub make_start_script($)
 {
     my $root = shift;
-    open FILE, ">", "$root/start-nginx.sh" or die "Can't open $root/start-nginx.sh: $!";
+    open FILE, ">", "$root/start-nginx.sh"
+            or die "Can't open $root/start-nginx.sh: $!";
 
     print FILE <<'EOF';
 nginx -c `pwd`\/conf\/nginx.conf -p `pwd`/
 EOF
     close FILE;
 
-    open FILE, ">", "$root/stop-nginx.sh" or die "Can't open $root/stop-nginx.sh: $!";
+    open FILE, ">", "$root/stop-nginx.sh"
+            or die "Can't open $root/stop-nginx.sh: $!";
     print FILE <<'EOF';
 kill `cat logs/nginx.pid `
 EOF
     close FILE;
 
-    chmod 0755, "$root/start-nginx.sh", "$root/stop-nginx.sh" or die "chmod failed: $!";
+    chmod 0755, "$root/start-nginx.sh", "$root/stop-nginx.sh"
+            or die "chmod failed: $!";
 }
 
 sub make_env($)
@@ -123,9 +127,7 @@ sub start_nginx($)
     my $pid = `cat logs/nginx.pid`;
     chomp $pid;
 
-    sleep(1);
-
-print("pid: $pid\n");
+    #print("pid: $pid\n");
     return $pid;
 }
 
@@ -136,7 +138,8 @@ sub curl($) {
 
     print $res;
 
-    open ERROR_LOG, "$tmpdir/logs/error.log" or die "Can't open $tmpdir/logs/error.log: $!";
+    open ERROR_LOG, "$tmpdir/logs/error.log"
+            or die "Can't open $tmpdir/logs/error.log: $!";
     while (<ERROR_LOG>) {
         print;
     }
@@ -145,17 +148,18 @@ sub curl($) {
 
 sub benchmark($) {
     my $tmpdir = shift;
-my $cmd = "ab -c 2 -n 100 \"http://127.0.0.1:$PORT/lua?a=1\" 2>&1";
-print("cmd: $cmd\n");
+    my $cmd = "ab -c 2 -n 5000 \"http://127.0.0.1:$PORT/lua?a=1\" 2>&1";
+    #print("cmd: $cmd\n");
     my $res = `$cmd`;
 
     print $res;
 
-    open ERROR_LOG, "$tmpdir/logs/error.log" or die "Can't open $tmpdir/logs/error.log: $!";
-    while (<ERROR_LOG>) {
-        print;
-    }
-    close ERROR_LOG;
+    #open ERROR_LOG, "$tmpdir/logs/error.log"
+    #       or die "Can't open $tmpdir/logs/error.log: $!";
+    #while (<ERROR_LOG>) {
+    #    print;
+    #}
+    #close ERROR_LOG;
 }
 
 sub run_file($$) {
@@ -174,6 +178,7 @@ sub run_file($$) {
     kill "TERM", $pid;
     `rm -r $tmpdir`;
 }
+
 
 my $cmd = shift || "run";
 
@@ -194,6 +199,5 @@ if ($cmd eq "make-env") {
 } elsif ($cmd eq "run") {
     run_file($luafile, \&curl);
 } elsif ($cmd eq "bench") {
-    print("port: $PORT\n");
     run_file($luafile, \&benchmark);
 }
