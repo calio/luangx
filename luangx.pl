@@ -11,6 +11,7 @@ use warnings;
 my $PORT = int(rand(10000) + 10000);
 my %opts;
 my $work_dir = getcwd();
+my $error_level = "notice";
 
 
 sub usage_and_die()
@@ -35,13 +36,13 @@ sub make_conf($) {
 
     my $conf = <<END;
 
-worker_processes  1;
+worker_processes  2;
 
-error_log  logs/error.log notice;
+error_log  logs/error.log $error_level;
 pid        logs/nginx.pid;
 
 events {
-    worker_connections  256;
+    worker_connections  1024;
 }
 
 http {
@@ -60,7 +61,7 @@ http {
     lua_package_cpath ';;';
 
     server {
-        listen       $PORT;
+        listen       $PORT backlog=512;
         server_name  localhost;
 
 
@@ -165,7 +166,13 @@ sub benchmark($) {
         usage_and_die();
     }
 
-    my $cmd = "ab -c $concurrency -n $num \"http://127.0.0.1:$PORT/lua?a=1\""
+    my $keepalive = "";
+    if ($opts{k}) {
+        $keepalive = "-k";
+    }
+
+    my $cmd = "ab -c $concurrency -n $num $keepalive "
+            . "\"http://127.0.0.1:$PORT/lua?a=1\""
             . "2>&1";
     #print("cmd: $cmd\n");
     my $res = `$cmd`;
@@ -209,7 +216,7 @@ if ($argc == 0) {
     check_cmd($cmd);
 }
 
-if (!getopts('hc:n:', \%opts)) {
+if (!getopts('hc:n:k', \%opts)) {
     usage_and_die();
 }
 
@@ -225,5 +232,6 @@ if ($cmd eq "make-env") {
 } elsif ($cmd eq "run") {
     run_file($luafile, \&curl);
 } elsif ($cmd eq "bench") {
+    $error_level = "error";
     run_file($luafile, \&benchmark);
 }
