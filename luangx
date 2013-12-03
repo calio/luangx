@@ -22,7 +22,17 @@ sub usage_and_die()
 
 sub usage()
 {
-    print "usage:\n";
+    print <<EOL;
+usage: luangx run luafile
+              bench [-c concurrency] [-n requests] [-k] luafile
+              make-env dir
+              <command> [args] [luafile]
+
+the most commonly used commands are:
+    run         run a lua scriipt using ngx_lua
+    make-env    make a nginx working environment, generate start/stop scripts
+    bench       do benchmark on a single lua script
+EOL
 }
 
 sub make_dirs($) {
