@@ -12,7 +12,7 @@ my $PORT = int(rand(10000) + 10000);
 my %opts;
 my $work_dir = getcwd();
 my $error_level = "notice";
-
+my $NGINX = "nginx";
 
 sub usage_and_die()
 {
@@ -46,7 +46,8 @@ sub make_conf($) {
 
     my $conf = <<END;
 
-worker_processes  2;
+master_process off;
+worker_processes  1;
 
 error_log  logs/error.log $error_level;
 pid        logs/nginx.pid;
@@ -102,8 +103,8 @@ sub make_start_script($)
     open FILE, ">", "$root/start-nginx.sh"
             or die "Can't open $root/start-nginx.sh: $!";
 
-    print FILE <<'EOF';
-nginx -c `pwd`\/conf\/nginx.conf -p `pwd`/
+    print FILE <<EOF;
+$NGINX -c `pwd`\/conf\/nginx.conf -p `pwd`/
 EOF
     close FILE;
 
@@ -126,14 +127,22 @@ sub make_env($)
     make_start_script($base);
 }
 
-sub check_cmd($)
+sub check_cmd()
 {
-    my $cmd = shift;
+    my $cmd = shift @ARGV;
+
+    if ($cmd =~ /.+\.lua/) {
+        unshift @ARGV, $cmd;
+
+        return "run";
+    }
 
     if ($cmd ne "run" && $cmd ne "make-env" && $cmd ne "bench") {
         print "Unknown command: $cmd\n";
         usage_and_die();
     }
+
+    return $cmd;
 }
 
 sub prepare_lua_file($$)
@@ -222,29 +231,36 @@ my $argc = @ARGV;
 
 if ($argc == 0) {
     usage_and_die();
-} elsif ($argc == 1) {
-    $cmd = "run";
 } else {
-    $cmd = shift;
-    check_cmd($cmd);
+    $cmd = check_cmd();
 }
 
 if (!getopts('hc:n:k', \%opts)) {
     usage_and_die();
 }
 
-my $luafile = shift;
-
-if (!$luafile) {
-    warn 'Missing lua file';
-    usage_and_die();
+if ($ENV{NGINX}) {
+    $NGINX=$ENV{NGINX}
 }
 
 if ($cmd eq "make-env") {
     make_env(".");
 } elsif ($cmd eq "run") {
+    my $luafile = shift;
+
+    if (!$luafile) {
+        warn 'Missing lua file';
+        usage_and_die();
+    }
+
     run_file($luafile, \&curl);
 } elsif ($cmd eq "bench") {
+    my $luafile = shift;
+
+    if (!$luafile) {
+        warn 'Missing lua file';
+        usage_and_die();
+    }
     $error_level = "error";
     run_file($luafile, \&benchmark);
 }
