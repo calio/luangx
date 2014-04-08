@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 
-use Getopt::Std;
+use Getopt::Long;
 use Cwd qw /getcwd/;
 use File::Temp qw/ tempdir /;
 use File::Copy;
@@ -9,10 +9,15 @@ use strict;
 use warnings;
 
 my $PORT = int(rand(10000) + 10000);
-my %opts;
 my $work_dir = getcwd();
 my $error_level = "notice";
 my $NGINX = "nginx";
+
+my $help = '';
+my $concurrency = 10,
+my $requests    = 1000,
+my $keepalive = '';
+
 
 sub usage_and_die()
 {
@@ -181,19 +186,18 @@ sub curl($) {
 
 sub benchmark($) {
     my $tmpdir = shift;
-    my $concurrency = $opts{c};
-    my $num = $opts{n};
+    my $num = $requests;
 
     if (!$concurrency or !$num) {
         usage_and_die();
     }
 
-    my $keepalive = "";
-    if ($opts{k}) {
-        $keepalive = "-k";
+    my $keepalive_arg = "";
+    if ($keepalive) {
+        $keepalive_arg = "-k";
     }
 
-    my $cmd = "ab -c $concurrency -n $num $keepalive "
+    my $cmd = "ab -c $concurrency -n $num $keepalive_arg "
             . "\"http://127.0.0.1:$PORT/lua?a=1\""
             . "2>&1";
     #print("cmd: $cmd\n");
@@ -235,9 +239,10 @@ if ($argc == 0) {
     $cmd = check_cmd();
 }
 
-if (!getopts('hc:n:k', \%opts)) {
-    usage_and_die();
-}
+GetOptions('help' => \$help,
+           'concurrency:i' => \$concurrency,
+           'num:i' => \$requests,
+           'keepalive' => \$keepalive) or usage_and_die();
 
 if ($ENV{NGINX}) {
     $NGINX=$ENV{NGINX}
