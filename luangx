@@ -138,8 +138,13 @@ sub check_cmd()
 
     if ($cmd =~ /.+\.lua/) {
         unshift @ARGV, $cmd;
-
         return "run";
+    }
+
+    if ($cmd =~ /^\-/) {
+        unshift @ARGV, $cmd;
+        #no command found
+        return "";
     }
 
     if ($cmd ne "run" && $cmd ne "make-env" && $cmd ne "bench") {
@@ -240,8 +245,8 @@ if ($argc == 0) {
 }
 
 GetOptions('help' => \$help,
-           'concurrency:i' => \$concurrency,
-           'num:i' => \$requests,
+           'concurrency=i' => \$concurrency,
+           'num=i' => \$requests,
            'keepalive' => \$keepalive) or usage_and_die();
 
 if ($ENV{NGINX}) {
@@ -268,4 +273,6 @@ if ($cmd eq "make-env") {
     }
     $error_level = "error";
     run_file($luafile, \&benchmark);
+} else {
+    usage_and_die();
 }
