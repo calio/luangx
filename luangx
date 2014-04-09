@@ -17,7 +17,16 @@ my $help = '';
 my $concurrency = 10,
 my $requests    = 1000,
 my $keepalive = '';
-
+my %phases = (
+    "rewrite" => '',
+    "access" => '',
+    "content" => 'content.lua',
+    "header_filter" => '',
+    "body_filter" => '',
+    "log" => ''
+);
+my $phase_handlers_text;
+my @phase_handlers;
 
 sub usage_and_die()
 {
@@ -28,7 +37,7 @@ sub usage_and_die()
 sub usage()
 {
     print <<EOL;
-usage: luangx run luafile
+usage: luangx run [--access luafile] [--rewrite luafile] [--header_flter luafile] [--body_filter luafile] [--log luafile] [--content] luafile
               bench [-c concurrency] [-n requests] [-k] luafile
               make-env dir
               <command> [args] [luafile]
@@ -46,8 +55,9 @@ sub make_dirs($) {
     mkdir "$root/conf";
 }
 
-sub make_conf($) {
+sub make_conf($$) {
     my $root = shift;
+    my $handler_text = shift;
 
     my $conf = <<END;
 
@@ -89,7 +99,8 @@ http {
         }
 
         location /lua {
-            content_by_lua_file "$root/main.lua";
+            $handler_text
+            #content_by_lua_file "$root/content.lua";
         }
     }
 }
@@ -124,11 +135,12 @@ EOF
             or die "chmod failed: $!";
 }
 
-sub make_env($)
+sub make_env($$)
 {
     my $base = shift;
+    my $handler_text = shift;
     make_dirs($base);
-    make_conf($base);
+    make_conf($base, $handler_text);
     make_start_script($base);
 }
 
@@ -155,10 +167,10 @@ sub check_cmd()
     return $cmd;
 }
 
-sub prepare_lua_file($$)
+sub prepare_lua_file($$$)
 {
-    my ($luafile, $workdir) = @_;
-    copy($luafile, "$workdir/main.lua");
+    my ($luafile, $workdir, $name) = @_;
+    copy($luafile, "$workdir/$name");
 }
 
 sub start_nginx($)
@@ -223,10 +235,17 @@ sub run_file($$) {
 
     my $tmpdir = tempdir( "/tmp/luangx.XXXXXXXX");
 
-    make_env($tmpdir);
+    $phases{"content"} = $luafile if $luafile;
 
-    prepare_lua_file($luafile, $tmpdir);
+    for my $phase (keys %phases) {
+        if ($phases{$phase}) {
+            prepare_lua_file($phases{$phase}, $tmpdir, "$phase.lua");
+            push @phase_handlers, "${phase}_by_lua_file \"$tmpdir/$phase.lua\";";
+        }
+    }
+    my $handler_text = join "\n", @phase_handlers;
 
+    make_env($tmpdir, $handler_text);
     my $pid = start_nginx($tmpdir);
 
     &$run($tmpdir);
@@ -247,6 +266,12 @@ if ($argc == 0) {
 GetOptions('help' => \$help,
            'concurrency=i' => \$concurrency,
            'num=i' => \$requests,
+           'rewrite=s' => \$phases{"rewrite"},
+           'access=s' => \$phases{"access"},
+           'content=s' => \$phases{"content"},
+           'header_filter=s' => \$phases{"header_filter"},
+           'body_filter=s' => \$phases{"body_filter"},
+           'log=s' => \$phases{"log"},
            'keepalive' => \$keepalive) or usage_and_die();
 
 if ($ENV{NGINX}) {
@@ -254,11 +279,11 @@ if ($ENV{NGINX}) {
 }
 
 if ($cmd eq "make-env") {
-    make_env(".");
+    make_env(".", "content_by_lua_file \"content.lua\";\n");
 } elsif ($cmd eq "run") {
     my $luafile = shift;
 
-    if (!$luafile) {
+    if (!$luafile && !$phases{"content"}) {
         warn 'Missing lua file';
         usage_and_die();
     }
