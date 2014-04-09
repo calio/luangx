@@ -4,6 +4,7 @@ use Getopt::Long;
 use Cwd qw /getcwd/;
 use File::Temp qw/ tempdir /;
 use File::Copy;
+use Template;
 
 use strict;
 use warnings;
@@ -27,6 +28,7 @@ my %phases = (
 );
 my $phase_handlers_text;
 my @phase_handlers;
+my $conf_template;
 
 sub usage_and_die()
 {
@@ -37,7 +39,9 @@ sub usage_and_die()
 sub usage()
 {
     print <<EOL;
-usage: luangx run [--access luafile] [--rewrite luafile] [--header_flter luafile] [--body_filter luafile] [--log luafile] [--content] luafile
+usage: luangx run [--template conf_tempate] [--access luafile]
+                  [--rewrite luafile] [--header_flter luafile]
+                  [--body_filter luafile] [--log luafile] [--content] luafile
               bench [-c concurrency] [-n requests] [-k] luafile
               make-env dir
               <command> [args] [luafile]
@@ -58,54 +62,21 @@ sub make_dirs($) {
 sub make_conf($$) {
     my $root = shift;
     my $handler_text = shift;
+    my $conf;
+    my $vars = {
+        root => $root,
+        port => $PORT,
+        work_dir => $work_dir,
+        error_level => $error_level,
+        handler_text => $handler_text,
+    };
 
-    my $conf = <<END;
-
-master_process off;
-worker_processes  1;
-
-error_log  logs/error.log $error_level;
-pid        logs/nginx.pid;
-
-events {
-    worker_connections  1024;
-}
-
-env HOME;
-env PATH;
-
-http {
-    #include       mime.types;
-    default_type  application/octet-stream;
-
-    access_log  logs/access.log  combined;
-
-    sendfile        on;
-    #tcp_nopush     on;
-
-    #keepalive_timeout  0;
-    keepalive_timeout  65;
-
-    lua_package_path '$work_dir/lib/?.lua;$root/lib/?.lua;/usr/local/openresty/lualib/?.lua;;';
-    lua_package_cpath ';;';
-
-    server {
-        listen       $PORT backlog=512;
-        server_name  localhost;
-
-
-        location /hello {
-            echo "hello";
-        }
-
-        location /lua {
-            $handler_text
-            #content_by_lua_file "$root/content.lua";
-        }
+    my $tt = Template->new() or die "Can't init Template.";
+    if ($conf_template) {
+        $tt->process($conf_template, $vars, \$conf) or die $tt->error();
+    } else {
+        $tt->process(\*DATA, $vars, \$conf) or die $tt->error();
     }
-}
-
-END
 
     open FILE, ">", "$root/conf/nginx.conf"
             or die "Can't open $root/conf/nginx.conf: $!";
@@ -272,7 +243,9 @@ GetOptions('help' => \$help,
            'header_filter=s' => \$phases{"header_filter"},
            'body_filter=s' => \$phases{"body_filter"},
            'log=s' => \$phases{"log"},
-           'keepalive' => \$keepalive) or usage_and_die();
+           'keepalive' => \$keepalive,
+           'template=s' => \$conf_template,
+) or usage_and_die();
 
 if ($ENV{NGINX}) {
     $NGINX=$ENV{NGINX}
@@ -301,3 +274,50 @@ if ($cmd eq "make-env") {
 } else {
     usage_and_die();
 }
+
+
+__END__
+master_process off;
+worker_processes  1;
+
+error_log  logs/error.log [% error_level %];
+pid        logs/nginx.pid;
+
+events {
+    worker_connections  1024;
+}
+
+env HOME;
+env PATH;
+
+http {
+    #include       mime.types;
+    default_type  application/octet-stream;
+
+    access_log  logs/access.log  combined;
+
+    sendfile        on;
+    #tcp_nopush     on;
+
+    #keepalive_timeout  0;
+    keepalive_timeout  65;
+
+    lua_package_path '[% work_dir %]/lib/?.lua;[% root %]/lib/?.lua;/usr/local/openresty/lualib/?.lua;;';
+    lua_package_cpath ';;';
+
+    server {
+        listen       [% port %] backlog=512;
+        server_name  localhost;
+
+
+        location /hello {
+            echo "hello";
+        }
+
+        location /lua {
+            [% handler_text %]
+            #content_by_lua_file "[% root %]/content.lua";
+        }
+    }
+}
+

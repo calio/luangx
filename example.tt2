@@ -1,0 +1,44 @@
+
+master_process off;
+worker_processes  1;
+
+error_log  logs/error.log [% error_level %];
+pid        logs/nginx.pid;
+
+events {
+    worker_connections  1024;
+}
+
+env HOME;
+env PATH;
+
+http {
+    #include       mime.types;
+    default_type  application/octet-stream;
+
+    access_log  logs/access.log  combined;
+
+    sendfile        on;
+    #tcp_nopush     on;
+
+    #keepalive_timeout  0;
+    keepalive_timeout  65;
+
+    lua_package_path '[% work_dir %]/lib/?.lua;[% root %]/lib/?.lua;/usr/local/openresty/lualib/?.lua;;';
+    lua_package_cpath ';;';
+
+    server {
+        listen       [% port %] backlog=512;
+        server_name  localhost;
+
+
+        location /hello {
+            echo "hello";
+        }
+
+        location /lua {
+            [% handler_text %]
+        }
+    }
+}
+
