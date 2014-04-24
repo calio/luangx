@@ -291,6 +291,8 @@ env HOME;
 env PATH;
 
 http {
+    resolver 8.8.8.8;
+
     #include       mime.types;
     default_type  application/octet-stream;
 
@@ -302,7 +304,7 @@ http {
     #keepalive_timeout  0;
     keepalive_timeout  65;
 
-    lua_package_path '[% work_dir %]/lib/?.lua;[% root %]/lib/?.lua;/usr/local/openresty/lualib/?.lua;;';
+    lua_package_path '[% work_dir %]/lib/?.lua;[% root %]/lib/?.lua;[% root %]/?.lua;/usr/local/openresty/lualib/?.lua;;';
     lua_package_cpath ';;';
 
     server {
