@@ -26,12 +26,17 @@ my %phases = (
     "body_filter" => '',
     "log" => ''
 );
+my $stdio;
+my $debug;
 my $phase_handlers_text;
 my @phase_handlers;
 my $conf_template;
 
+my $saved_argv;
+
 sub usage_and_die()
 {
+    print "Invalid use:\n$saved_argv\n";
     usage();
     exit 1;
 }
@@ -124,13 +129,18 @@ sub check_cmd()
         return "run";
     }
 
+    if ($cmd eq "-") {
+        unshift @ARGV, $cmd;
+        return "run";
+    }
+
     if ($cmd =~ /^\-/) {
         unshift @ARGV, $cmd;
         #no command found
         return "";
     }
 
-    if ($cmd ne "run" && $cmd ne "make-env" && $cmd ne "bench") {
+    if ($cmd ne "run" && $cmd ne "make-env" && $cmd ne "bench" && $cmd ne "-") {
         print "Unknown command: $cmd\n";
         usage_and_die();
     }
@@ -141,6 +151,12 @@ sub check_cmd()
 sub prepare_lua_file($$$)
 {
     my ($luafile, $workdir, $name) = @_;
+    if ($luafile eq "-") {
+        open OUT, ">", "$workdir/$name" or die "can't open $workdir/$name: $!";
+        my @content = <STDIN>;
+        print OUT @content;
+        close OUT;
+    }
     copy($luafile, "$workdir/$name");
 }
 
@@ -203,7 +219,6 @@ sub benchmark($) {
 
 sub run_file($$) {
     my ($luafile, $run) = @_;
-
     my $tmpdir = tempdir( "/tmp/luangx.XXXXXXXX");
 
     $phases{"content"} = $luafile if $luafile;
@@ -222,11 +237,18 @@ sub run_file($$) {
     &$run($tmpdir);
 
     kill "TERM", $pid;
-    `rm -r $tmpdir`;
+
+    if ($debug) {
+        print $tmpdir;
+    } else {
+        `rm -r $tmpdir`;
+    }
 }
 
 my $cmd;
 my $argc = @ARGV;
+
+$saved_argv = join(" ", @ARGV);
 
 if ($argc == 0) {
     usage_and_die();
@@ -234,7 +256,8 @@ if ($argc == 0) {
     $cmd = check_cmd();
 }
 
-GetOptions('help' => \$help,
+GetOptions('' => \$stdio,
+           'help' => \$help,
            'concurrency=i' => \$concurrency,
            'num=i' => \$requests,
            'rewrite=s' => \$phases{"rewrite"},
@@ -245,6 +268,7 @@ GetOptions('help' => \$help,
            'log=s' => \$phases{"log"},
            'keepalive' => \$keepalive,
            'template=s' => \$conf_template,
+           'debug' => \$debug,
 ) or usage_and_die();
 
 if ($ENV{NGINX}) {
@@ -255,6 +279,9 @@ if ($cmd eq "make-env") {
     make_env(".", "content_by_lua_file \"content.lua\";\n");
 } elsif ($cmd eq "run") {
     my $luafile = shift;
+    if ($stdio) {
+        $luafile = "-";
+    }
 
     if (!$luafile && !$phases{"content"}) {
         warn 'Missing lua file';
