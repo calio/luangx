@@ -27,7 +27,7 @@ my %phases = (
     "log" => ''
 );
 my $stdio;
-my $debug;
+my $debug = 0;
 my $phase_handlers_text;
 my @phase_handlers;
 my $conf_template;
@@ -60,6 +60,9 @@ EOL
 
 sub make_dirs($) {
     my $root = shift;
+    if (! -d $root) {
+        mkdir $root;
+    }
     mkdir "$root/logs";
     mkdir "$root/conf";
 }
@@ -276,7 +279,8 @@ if ($ENV{NGINX}) {
 }
 
 if ($cmd eq "make-env") {
-    make_env(".", "content_by_lua_file \"content.lua\";\n");
+    my $dir = $ARGV[0] || ".";
+    make_env($dir, "content_by_lua_file \"content.lua\";\n");
 } elsif ($cmd eq "run") {
     my $luafile = shift;
     if ($stdio) {
