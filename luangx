@@ -31,6 +31,7 @@ my $debug = 0;
 my $phase_handlers_text;
 my @phase_handlers;
 my $conf_template;
+my $verbose = 0;
 
 my $saved_argv;
 
@@ -46,7 +47,8 @@ sub usage()
     print <<EOL;
 usage: luangx run [--template conf_tempate] [--access luafile]
                   [--rewrite luafile] [--header_flter luafile]
-                  [--body_filter luafile] [--log luafile] [--content] luafile
+                  [--body_filter luafile] [--log luafile] [--content]
+                  [--verbose] [--debug] luafile
               bench [-c concurrency] [-n requests] [-k] luafile
               make-env dir
               <command> [args] [luafile]
@@ -179,7 +181,14 @@ sub start_nginx($)
 sub curl($) {
     my $tmpdir = shift;
 
-    my $res = `curl "localhost:$PORT/lua?a=1" 2>/dev/null`;
+    my $args;
+    if ($verbose) {
+        $args = "-v";
+    } else {
+        $args = "";
+    }
+
+    my $res = `curl -s $args "localhost:$PORT/lua?a=1" 2>&1`;
 
     print $res;
 
@@ -272,6 +281,7 @@ GetOptions('' => \$stdio,
            'keepalive' => \$keepalive,
            'template=s' => \$conf_template,
            'debug' => \$debug,
+           'verbose' => \$verbose,
 ) or usage_and_die();
 
 if ($ENV{NGINX}) {
