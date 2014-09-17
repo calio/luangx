@@ -97,14 +97,15 @@ sub make_conf($$) {
 sub make_start_script($)
 {
     my $root = shift;
+    # start script
     open FILE, ">", "$root/start-nginx.sh"
             or die "Can't open $root/start-nginx.sh: $!";
-
     print FILE <<EOF;
 $NGINX -c `pwd`\/conf\/nginx.conf -p `pwd`/
 EOF
     close FILE;
 
+    # stop script
     open FILE, ">", "$root/stop-nginx.sh"
             or die "Can't open $root/stop-nginx.sh: $!";
     print FILE <<'EOF';
@@ -112,8 +113,18 @@ kill `cat logs/nginx.pid `
 EOF
     close FILE;
 
-    chmod 0755, "$root/start-nginx.sh", "$root/stop-nginx.sh"
-            or die "chmod failed: $!";
+    # restart script
+    open FILE, ">", "$root/restart-nginx.sh"
+            or die "Can't open $root/restart-nginx.sh: $!";
+    print FILE <<EOF;
+./stop-nginx.sh
+./start-nginx.sh
+EOF
+    close FILE;
+
+    chmod 0755, "$root/start-nginx.sh", "$root/stop-nginx.sh",
+            "$root/restart-nginx.sh" or die "chmod failed: $!";
+
 }
 
 sub make_env($$)
