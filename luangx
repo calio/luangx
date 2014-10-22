@@ -117,6 +117,8 @@ sub make_start_script($)
             or die "Can't open $root/start-nginx.sh: $!";
     print FILE <<EOF;
 $NGINX -c `pwd`\/conf\/nginx.conf -p `pwd`/
+PORT=$(cat conf/nginx.conf|grep listen|awk '{print $2}')
+echo "Nginx started on http://127.0.0.1:$PORT/"
 EOF
     close FILE;
 
