@@ -34,9 +34,13 @@ my $conf_template;
 
 my $saved_argv;
 
-sub usage_and_die()
+sub usage_and_die
 {
-    print "Invalid use:\n$saved_argv\n";
+    my $show_args = shift;
+
+    if ($show_args) {
+        print "Invalid use: $saved_argv\n";
+    }
     usage();
     exit 1;
 }
@@ -52,9 +56,19 @@ usage: luangx run [--template conf_tempate] [--access luafile]
               <command> [args] [luafile]
 
 the most commonly used commands are:
-    run         run a lua scriipt using ngx_lua
-    make-env    make a nginx working environment, generate start/stop scripts
-    bench       do benchmark on a single lua script
+    run         Run a lua scriipt using ngx_lua
+    make-env    Make a nginx working environment, generate start/stop scripts
+    bench       Do benchmark on a single lua script
+
+arguments:
+    --debug         Turn on debug mode. Do not delte config file after script
+                    finishes.
+    --help          Show this message.
+    --error_level   Nginx error level
+
+environment variables:
+    NGINX       nginx binary used to execute lua script
+
 EOL
 }
 
@@ -65,6 +79,7 @@ sub make_dirs($) {
     }
     mkdir "$root/logs";
     mkdir "$root/conf";
+    mkdir "$root/html";
 }
 
 sub make_conf($$) {
@@ -168,7 +183,16 @@ sub start_nginx($)
     my $workdir = shift;
     chdir $workdir;
 
-    `./start-nginx.sh`;
+    if ($debug) {
+        print("run ./start-nginx.sh\n");
+    }
+
+    print("check $workdir\n");
+
+    print(`bash ./start-nginx.sh`);
+
+    print("after start\n");
+
     my $pid = `cat logs/nginx.pid`;
     chomp $pid;
 
@@ -196,7 +220,7 @@ sub benchmark($) {
     my $num = $requests;
 
     if (!$concurrency or !$num) {
-        usage_and_die();
+        usage_and_die(1);
     }
 
     my $keepalive_arg = "";
@@ -224,6 +248,10 @@ sub run_file($$) {
     my ($luafile, $run) = @_;
     my $tmpdir = tempdir( "/tmp/luangx.XXXXXXXX");
 
+    if ($debug) {
+        print("tempdir: $tmpdir\n");
+    }
+
     $phases{"content"} = $luafile if $luafile;
 
     for my $phase (keys %phases) {
@@ -236,6 +264,7 @@ sub run_file($$) {
 
     make_env($tmpdir, $handler_text);
     my $pid = start_nginx($tmpdir);
+    print("after start nginx");
 
     &$run($tmpdir);
 
@@ -272,10 +301,19 @@ GetOptions('' => \$stdio,
            'keepalive' => \$keepalive,
            'template=s' => \$conf_template,
            'debug' => \$debug,
-) or usage_and_die();
+           'error_level=s' => \$error_level,
+) or usage_and_die(1);
 
 if ($ENV{NGINX}) {
-    $NGINX=$ENV{NGINX}
+    $NGINX=$ENV{NGINX};
+
+    if ($debug) {
+        print("Using nginx from environment variable \"NGINX\": $NGINX\n");
+    }
+}
+
+if ($help) {
+    usage_and_die();
 }
 
 if ($cmd eq "make-env") {
@@ -289,7 +327,7 @@ if ($cmd eq "make-env") {
 
     if (!$luafile && !$phases{"content"}) {
         warn 'Missing lua file';
-        usage_and_die();
+        usage_and_die(1);
     }
 
     run_file($luafile, \&curl);
@@ -298,17 +336,17 @@ if ($cmd eq "make-env") {
 
     if (!$luafile) {
         warn 'Missing lua file';
-        usage_and_die();
+        usage_and_die(1);
     }
     $error_level = "error";
     run_file($luafile, \&benchmark);
 } else {
-    usage_and_die();
+    usage_and_die(1);
 }
 
 
 __END__
-master_process off;
+#master_process off;
 worker_processes  1;
 
 error_log  logs/error.log [% error_level %];
@@ -343,13 +381,17 @@ http {
         server_name  localhost;
 
 
-        location /hello {
-            echo "hello";
-        }
+#        location /hello {
+#            echo "hello";
+#        }
 
         location /lua {
             [% handler_text %]
             #content_by_lua_file "[% root %]/content.lua";
+        }
+
+        location / {
+            root html;
         }
     }
 }

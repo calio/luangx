@@ -32,9 +32,9 @@ http {
         server_name  localhost;
 
 
-        location /hello {
-            echo "hello";
-        }
+#        location /hello {
+#            echo "hello";
+#        }
 
         location /lua {
             [% handler_text %]
