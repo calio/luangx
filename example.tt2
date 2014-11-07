@@ -14,6 +14,31 @@ env PATH;
 
 http {
     #include       mime.types;
+    types {
+        text/html                             html htm shtml;
+        text/css                              css;
+        text/xml                              xml;
+        text/plain                            txt;
+        text/x-component                      htc;
+
+        application/javascript                js;
+        application/atom+xml                  atom;
+        application/rss+xml                   rss;
+
+        image/gif                             gif;
+        image/jpeg                            jpeg jpg;
+        image/png                             png;
+        image/tiff                            tif tiff;
+        image/x-icon                          ico;
+        image/x-ms-bmp                        bmp;
+        image/svg+xml                         svg svgz;
+        image/webp                            webp;
+
+        application/json                      json;
+        application/xhtml+xml                 xhtml;
+        application/zip                       zip;
+    }
+
     default_type  application/octet-stream;
 
     access_log  logs/access.log  combined;
