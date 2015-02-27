@@ -49,7 +49,7 @@ http {
     #keepalive_timeout  0;
     keepalive_timeout  65;
 
-    lua_package_path '[% work_dir %]/lib/?.lua;[% root %]/lib/?.lua;/usr/local/openresty/lualib/?.lua;;';
+    lua_package_path '[% work_dir %]/?.lua;[% work_dir %]/lib/?.lua;[% root %]/lib/?.lua;/usr/local/openresty/lualib/?.lua;;';
     lua_package_cpath ';;';
 
     server {
