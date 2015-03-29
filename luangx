@@ -112,6 +112,22 @@ sub make_conf($$) {
 sub make_start_script($)
 {
     my $root = shift;
+
+    # index.html
+    open FILE, ">", "$root/html/index.html"
+            or die "Can't open $root/html/index.html: $!";
+    print FILE <<EOF;
+<html>
+<head>
+<title>Title</title>
+</head>
+<body>
+<p1>Hi</p1>
+</body>
+</html>
+EOF
+    close FILE;
+
     # start script
     open FILE, ">", "$root/start-nginx.sh"
             or die "Can't open $root/start-nginx.sh: $!";
