@@ -4,7 +4,6 @@ use Getopt::Long;
 use Cwd qw /getcwd/;
 use File::Temp qw/ tempdir /;
 use File::Copy;
-use Template;
 
 use strict;
 use warnings;
@@ -84,6 +83,20 @@ sub make_dirs($) {
     mkdir "$root/html";
 }
 
+sub process_template($$) {
+    my $in = shift;
+    my $vars = shift;
+    my $out = $in;
+
+    $out =~ s/\[% error_level %\]/$vars->{error_level}/g;
+    $out =~ s/\[% work_dir %\]/$vars->{work_dir}/g;
+    $out =~ s/\[% root %\]/$vars->{root}/g;
+    $out =~ s/\[% port %\]/$vars->{port}/g;
+    $out =~ s/\[% handler_text %\]/$vars->{handler_text}/g;
+
+    return $out;
+}
+
 sub make_conf($$) {
     my $root = shift;
     my $handler_text = shift;
@@ -96,11 +109,12 @@ sub make_conf($$) {
         handler_text => $handler_text,
     };
 
-    my $tt = Template->new() or die "Can't init Template.";
     if ($conf_template) {
-        $tt->process($conf_template, $vars, \$conf) or die $tt->error();
+        open FILE, "<", $conf_template or die "Can't open $conf_template";
+        $conf = process_template(join("", <FILE>), $vars);
+        close FILE;
     } else {
-        $tt->process(\*DATA, $vars, \$conf) or die $tt->error();
+        $conf = process_template(join("", <DATA>), $vars);
     }
 
     open FILE, ">", "$root/conf/nginx.conf"
